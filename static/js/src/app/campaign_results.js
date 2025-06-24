@@ -858,7 +858,7 @@ function load() {
                             "render": function(data, type, row) {
                                 return '<button class="btn btn-primary btn-xs" onclick="resendResult(\'' + row[0] + '\', \'' + row[4] + '\')"><i class="fa fa-paper-plane"></i> Resend</button>';
                             },
-                            "targets": [9] // This targets our new, empty column
+                            "targets": [9]
                         }
                     ]
                 });
