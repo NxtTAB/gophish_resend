@@ -3,6 +3,7 @@ package models
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net"
 	"time"
@@ -206,5 +207,66 @@ func (r *Result) GenerateId(tx *gorm.DB) error {
 func GetResult(rid string) (Result, error) {
 	r := Result{}
 	err := db.Where("r_id=?", rid).First(&r).Error
+	return r, err
+}
+
+// ResendResultByRId finds a specific result by its public RId and requeues it for sending.
+func ResendResultByRId(rid string, user_id int64) error {
+	r, err := GetResult(rid)
+	if err != nil {
+		return errors.New("Result not found")
+	}
+
+	// Verify the user has access to this campaign
+	_, err = GetCampaign(r.CampaignId, user_id)
+	if err != nil {
+		return errors.New("access denied")
+	}
+
+	// Create a new MailLog entry to trigger the send operation by the mailer.
+	m := &MailLog{
+		CampaignId: r.CampaignId,
+		UserId:     r.UserId,
+		SendDate:   time.Now().UTC(),
+		RId:        r.RId,
+	}
+	return db.Create(m).Error
+}
+
+// ResendAllResults finds all results for a given campaign and requeues them.
+func ResendAllResults(campaign_id int64) error {
+	results := []Result{}
+	err := db.Where("campaign_id = ?", campaign_id).Find(&results).Error
+	if err != nil {
+		return err
+	}
+	for _, r := range results {
+		m := &MailLog{
+			CampaignId: r.CampaignId,
+			UserId:     r.UserId,
+			SendDate:   time.Now().UTC(),
+			RId:        r.RId,
+		}
+		err = db.Create(m).Error
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CountMailLogs returns the number of MailLogs.
+// This is a helper function intended for use in tests.
+func CountMailLogs(cid int64) (int64, error) {
+	var count int64
+	err := db.Model(&MailLog{}).Where("campaign_id = ?", cid).Count(&count).Error
+	return count, err
+}
+
+// GetFirstResultForCampaign returns the first result for a given campaign.
+// This is a helper function intended for use in tests.
+func GetFirstResultForCampaign(cid int64) (Result, error) {
+	r := Result{}
+	err := db.Where("campaign_id = ?", cid).First(&r).Error
 	return r, err
 }
