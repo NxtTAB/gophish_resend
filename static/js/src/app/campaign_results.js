@@ -856,11 +856,7 @@ function load() {
                         {
                             orderable: false,
                             "render": function(data, type, row) {
-                                // row[6] is Status, row[0] is RId, row[4] is email
-                                if (row[6] === "Email Sent") {
-                                    return '<button class="btn btn-primary btn-xs" onclick="resendResult(\'' + row[0] + '\', \'' + row[4] + '\')">Resend</button>';
-                                }
-                                return '';
+                                return '<button class="btn btn-primary btn-xs" onclick="resendResult(\'' + row[0] + '\', \'' + row[4] + '\')"><i class="fa fa-paper-plane"></i> Resend</button>';
                             },
                             "targets": [9] // This targets our new, empty column
                         }
