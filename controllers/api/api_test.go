@@ -10,6 +10,7 @@ import (
 
 	"github.com/gophish/gophish/config"
 	"github.com/gophish/gophish/models"
+	"github.com/stretchr/testify/assert"
 )
 
 type testContext struct {
@@ -111,4 +112,82 @@ func TestSiteImportBaseHref(t *testing.T) {
 	if cs.HTML != expected {
 		t.Fatalf("unexpected response received. expected %s got %s", expected, cs.HTML)
 	}
+}
+
+func TestResendCampaign(t *testing.T) {
+	ctx := setupTest(t)
+	createTestData(t)
+
+	t.Run("Test ResendAll Success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/campaigns/1/resendall", nil)
+		req.Header.Set("Authorization", "Bearer "+ctx.apiKey)
+
+		rr := httptest.NewRecorder()
+		ctx.apiServer.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		count, _ := models.CountMailLogs(1)
+		assert.Equal(t, int64(4), count, "Expected 4 total mail logs after resend")
+	})
+
+	t.Run("Test ResendAll Authorization Failure", func(t *testing.T) {
+		otherUser := models.User{Username: "other", Role: models.Role{Name: models.RoleUser}}
+		models.PutUser(&otherUser)
+		otherCampaign := models.Campaign{Name: "Other Campaign", UserId: otherUser.Id}
+		models.PostCampaign(&otherCampaign, otherUser.Id)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/resendall", otherCampaign.Id), nil)
+		req.Header.Set("Authorization", "Bearer "+ctx.apiKey)
+
+		rr := httptest.NewRecorder()
+		ctx.apiServer.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+}
+
+func TestResendResult(t *testing.T) {
+	ctx := setupTest(t)
+	createTestData(t)
+
+	t.Run("Test Resend Single Result Success", func(t *testing.T) {
+		// Get the first result from our test campaign to use its correct public RId
+		result, err := models.GetFirstResultForCampaign(1)
+		assert.NoError(t, err)
+
+		// Use the correct result.RId in the URL
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/results/%s/resend", result.RId), nil)
+		req.Header.Set("Authorization", "Bearer "+ctx.apiKey)
+
+		rr := httptest.NewRecorder()
+		ctx.apiServer.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code, "Expected Status OK")
+
+		count, _ := models.CountMailLogs(1)
+		assert.Equal(t, int64(3), count, "Expected 3 total mail logs after single resend")
+	})
+
+	t.Run("Test Resend Single Result Authorization Failure", func(t *testing.T) {
+		// Create a new, non-admin user
+		regularUser := models.User{Username: "testuser", Role: models.Role{Name: models.RoleUser}}
+		models.PutUser(&regularUser)
+
+		// FIX: We must reload the user from the database to get the generated API key.
+		reloadedUser, err := models.GetUser(regularUser.Id)
+		assert.NoError(t, err)
+
+		// The admin (ctx.admin) owns campaign 1, which was created by createTestData()
+		resultToTest, _ := models.GetFirstResultForCampaign(1)
+
+		// Now, we make the API call AS the new regularUser by using their reloaded API key.
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/results/%s/resend", resultToTest.RId), nil)
+		req.Header.Set("Authorization", "Bearer "+reloadedUser.ApiKey)
+
+		rr := httptest.NewRecorder()
+		ctx.apiServer.ServeHTTP(rr, req)
+
+		// The permission check should now fail correctly, giving us the 401 error we expect.
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+	})
 }

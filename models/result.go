@@ -254,3 +254,19 @@ func ResendAllResults(campaign_id int64) error {
 	}
 	return nil
 }
+
+// CountMailLogs returns the number of MailLogs.
+// This is a helper function intended for use in tests.
+func CountMailLogs(cid int64) (int64, error) {
+	var count int64
+	err := db.Model(&MailLog{}).Where("campaign_id = ?", cid).Count(&count).Error
+	return count, err
+}
+
+// GetFirstResultForCampaign returns the first result for a given campaign.
+// This is a helper function intended for use in tests.
+func GetFirstResultForCampaign(cid int64) (Result, error) {
+	r := Result{}
+	err := db.Where("campaign_id = ?", cid).First(&r).Error
+	return r, err
+}
